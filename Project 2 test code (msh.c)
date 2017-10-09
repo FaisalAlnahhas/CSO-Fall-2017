@@ -1,11 +1,12 @@
-//
+//Faisal Alnahhas
+//UT Arlington - Fall 2017
+//OS - Project 2 Writing a Shell
 //  msh.c
-//  
+//
 //
 //  Created by Faisal Alnahhas on 10/8/17.
 //
 
-#include "msh.h"
 // The MIT License (MIT)
 //
 // Copyright (c) 2016, 2017 Trevor Bakker
@@ -55,7 +56,7 @@ void ls()
     if (child_pid == 0)
     {
         execl("/bin/ls", "ls", NULL); //using code from github
-        exit (EXIT_SUCESS); //indicating successful completion of task
+        exit (EXIT_SUCCESS); //indicating successful completion of task
     }
     
     waitpid(child_pid, &status, 0);
@@ -73,6 +74,34 @@ int cd(char *path)
     return 0;
 }
 
+int cddot()
+{
+    
+    //for this function i am taking the cwd and checking the string from its end until i find a /, since there is no
+    //back slash at the end of a path. When I see one I use n to make a copy of the old cwd to a new cwd that stops at n
+    //without including the last portion of the path.
+    char cwd[255];
+    getcwd(cwd, sizeof(cwd));
+    char reduced_path[255];
+    
+    long n = strlen(cwd);
+    
+    while(n!=0)
+    {
+        if (cwd[n] == '/')
+        {
+            break;
+        }
+        else
+        {
+            n--;
+        }
+    }
+    strncpy(reduced_path, cwd, n);
+    chdir(reduced_path);
+    return 0;
+}
+
 
 int main()
 {
@@ -82,7 +111,7 @@ int main()
     while( 1 )
     {
         // Print out the msh prompt
-top:        printf ("msh> ");
+    top:        printf ("msh> ");
         
         // Read the command from the commandline.  The
         // maximum command that will be read is MAX_COMMAND_SIZE
@@ -91,11 +120,11 @@ top:        printf ("msh> ");
         // is no input
         
         //no need to use while to wait for user input because we're okay with empty input
-        !fgets (cmd_str, MAX_COMMAND_SIZE, stdin);
+        fgets (cmd_str, MAX_COMMAND_SIZE, stdin);
         
         if (!strcmp(cmd_str, "\n"))
         {
-            goto top;
+            goto top; //if user just hits enter with typing anything go back to prompting msh>
         }
         
         /* Parse input */
@@ -149,14 +178,20 @@ top:        printf ("msh> ");
             cd(token[token_index + 1]);
         }
         
-        
-      /*  for( token_index = 0; token_index < token_count; token_index ++ )
+        else if (!strcmp(token[token_index], "cd.."))
         {
-            printf("token[%d] = %s\n", token_index, token[token_index] );
+            cddot();
         }
-        */
+        
+        
+        /*  for( token_index = 0; token_index < token_count; token_index ++ )
+         {
+         printf("token[%d] = %s\n", token_index, token[token_index] );
+         }
+         */
         free( working_root );
         
     }
     return 0;
 }
+
