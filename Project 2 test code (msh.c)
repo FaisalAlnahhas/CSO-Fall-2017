@@ -1,4 +1,4 @@
-//Faisal Alnahhas
+////Faisal Alnahhas
 //UT Arlington - Fall 2017
 //OS - Project 2 Writing a Shell
 //  msh.c
@@ -105,8 +105,13 @@ int cddot()
 
 int main()
 {
+    int command_index=0;
     
     char * cmd_str = (char*) malloc( MAX_COMMAND_SIZE );
+    //dynamically create a new copy of cmd_str to avoid collision of memory for the pointers
+    char * cmd_str_copy = (char*) malloc( MAX_COMMAND_SIZE );
+    
+    char *commands[15]; //array for storing the commands entered
     
     while( 1 )
     {
@@ -158,6 +163,24 @@ int main()
         // Now print the tokenized input as a debug check
         // \TODO Remove this code and replace with your shell functionality
         
+        //using strndup will allow the heap to create new usable memory for each entry in the array without overrwiting
+        //space of each previously allocated pointer, which is useful in making, this way we can create add multiple
+        //entries to the array
+        cmd_str_copy = strndup(cmd_str, strlen(cmd_str));
+        
+        commands[command_index] = cmd_str_copy;
+        
+        printf("cmd_str: %s", cmd_str_copy);
+        
+        printf("commands are: %s", commands[command_index]);
+        command_index++;
+        
+        //we set the next index (after incrementing) to null to give the array an end point so that when we print
+        //history it only prints up to the number of commands entered
+        commands[command_index] = NULL;
+
+
+        
         int token_index  = 0;
         
         int status;
@@ -175,12 +198,38 @@ int main()
         
         else if (!strcmp(token[token_index], "cd"))
         {
-            cd(token[token_index + 1]);
+            if (!strcmp(token[token_index+1], ".."))
+            {
+                //printf("random string\n");
+                cddot();
+            }
+            else
+            {
+                cd(token[token_index + 1]);
+            }
         }
         
-        else if (!strcmp(token[token_index], "cd.."))
+       /* else if (!strcmp(token[token_index], "cd .."))
         {
             cddot();
+        } */
+        
+        else if(!strcmp(token[token_index], "history"))
+        {
+            int i;
+            for(i=0; commands[i] != NULL; i++)
+            {
+                printf("%d: %s \n", i , commands[i]);
+            }
+            if(!strcmp(token[token_index], "!"))
+            {
+                
+            }
+        }
+        
+        else
+        {
+            printf("%s: Command not found.\n", token[token_index]);
         }
         
         
