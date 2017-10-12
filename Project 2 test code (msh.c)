@@ -73,8 +73,8 @@ int cd(char *path)
     chdir(cwd);
     return 0;
 }
-
-int cddot()
+//I know we're not supposed to implement cd .. on our own, but I wrote this before I realized that.
+/*int cddot()
 {
     
     //for this function i am taking the cwd and checking the string from its end until i find a /, since there is no
@@ -100,7 +100,8 @@ int cddot()
     strncpy(reduced_path, cwd, n);
     chdir(reduced_path);
     return 0;
-}
+} */
+
 
 
 int main()
@@ -170,9 +171,9 @@ int main()
         
         commands[command_index] = cmd_str_copy;
         
-        printf("cmd_str: %s", cmd_str_copy);
+   //     printf("cmd_str: %s", cmd_str_copy);
         
-        printf("commands are: %s", commands[command_index]);
+      //  printf("commands are: %s", commands[command_index]);
         command_index++;
         
         //we set the next index (after incrementing) to null to give the array an end point so that when we print
@@ -182,8 +183,8 @@ int main()
 
         
         int token_index  = 0;
-        
         int status;
+       
         
         if((!strcmp(token[token_index], "exit")) || (!strcmp(token[token_index], "quit")))
         {
@@ -191,14 +192,15 @@ int main()
             exit(status);
         }
         
-        else if (!strcmp(token[token_index], "ls"))
-        {
-            ls();
-        }
+        /*   else if (!strcmp(token[token_index], "ls"))
+         {
+         ls();
+         } */
         
         else if (!strcmp(token[token_index], "cd"))
         {
-            if (!strcmp(token[token_index+1], ".."))
+            cd(token[token_index + 1]);
+           /* if (!strcmp(token[token_index+1], ".."))
             {
                 //printf("random string\n");
                 cddot();
@@ -206,13 +208,9 @@ int main()
             else
             {
                 cd(token[token_index + 1]);
-            }
+            } */
         }
         
-       /* else if (!strcmp(token[token_index], "cd .."))
-        {
-            cddot();
-        } */
         
         else if(!strcmp(token[token_index], "history"))
         {
@@ -220,26 +218,65 @@ int main()
             for(i=0; commands[i] != NULL; i++)
             {
                 printf("%d: %s \n", i , commands[i]);
-            }
-            if(!strcmp(token[token_index], "!"))
-            {
-                
+
             }
         }
+        
+     /*   else if(token[token_index][0] == '!')
+        {
+         //   printf("yay\n");
+            char *number;
+            number = strtok(token[token_index], "!");
+        //    printf("number is: %s\n", number);
+            int num_copy = atoi(number);
+        //    number = commands[(int)number];
+            printf("number: %d\n", num_copy);
+            
+        } */
+        
         
         else
         {
-            printf("%s: Command not found.\n", token[token_index]);
+            pid_t child_pid = fork();
+            
+            
+            //to check for command not found we fork, and then check the child process
+            //if it returns errno2 then we know the command is not found;
+            if (child_pid == 0)
+            {
+                if(token[token_index][0] == '!')
+                {
+                    char *number;
+                    number = strtok(token[token_index], "!");
+                    int num_copy = atoi(number);
+                    printf("number: %d\n", num_copy);
+                    printf("command: %s\n", commands[num_copy]);
+                 //   strcpy(token, commands[num_copy]);
+                 //   token = commands[num_copy];
+                    
+                }
+                else if(execvp(token[token_index], token) < 0)
+                {
+                    int error = errno;
+                    if (error == 2)
+                    {
+                        printf("%s: Command Not Found\n", token[token_index]);
+                    }
+                    exit(1); //if we get here then we failed
+
+                }
+                exit(EXIT_SUCCESS); //if we get to here then we want to succesfully exit the process
+            }
+            else
+            {
+                waitpid(child_pid, &status, 0);
+                
+            }
+
         }
         
-        
-        /*  for( token_index = 0; token_index < token_count; token_index ++ )
-         {
-         printf("token[%d] = %s\n", token_index, token[token_index] );
-         }
-         */
+
         free( working_root );
-        
     }
     return 0;
 }
