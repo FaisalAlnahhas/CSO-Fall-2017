@@ -49,18 +49,6 @@
 //Changing it to 10 per requirement of project
 #define MAX_NUM_ARGUMENTS 10     // Mav shell only supports five arguments
 
-void ls()
-{
-    pid_t child_pid = fork();
-    int status;
-    if (child_pid == 0)
-    {
-        execl("/bin/ls", "ls", NULL); //using code from github
-        exit (EXIT_SUCCESS); //indicating successful completion of task
-    }
-    
-    waitpid(child_pid, &status, 0);
-}
 
 int cd(char *path)
 {
@@ -73,6 +61,39 @@ int cd(char *path)
     chdir(cwd);
     return 0;
 }
+
+
+//using https://stackoverflow.com/questions/12683466/after-suspending-child-process-with-sigtstp-shell-not-responding
+//for ctrl-z
+static void handle_signal(int sig)
+{
+    printf (" Caught signal %d\n", sig );
+    
+  /*  switch(sig){
+        case SIGCHLD:
+            waitpid(-1, &status, WNOHANG);
+            printf (" Caught signal %d\n", sig );
+            break;
+    } */
+    
+    
+}
+
+static void handle_signalz(int sig)
+{
+    int status;
+    printf (" Caught signal %d\n", sig );
+    
+    switch(sig){
+        case SIGCHLD:
+            waitpid(-1, &status, WNOHANG);
+            printf (" Caught signal %d\n", sig );
+            break;
+    }
+    
+    
+}
+
 //I know we're not supposed to implement cd .. on our own, but I wrote this before I realized that.
 /*int cddot()
 {
@@ -106,13 +127,47 @@ int cd(char *path)
 
 int main()
 {
-    int command_index=0;
-    
+    int command_index = 0;
     char * cmd_str = (char*) malloc( MAX_COMMAND_SIZE );
     //dynamically create a new copy of cmd_str to avoid collision of memory for the pointers
     char * cmd_str_copy = (char*) malloc( MAX_COMMAND_SIZE );
     
     char *commands[15]; //array for storing the commands entered
+    
+    char *pids[255]; //array for storing the pids
+    int *pid_index; //a pointer to the index so we can use it later to grab the value of the pid
+    int pid_index_copy = 0; //to avoid memory collision use a copy of pid_index
+    pid_index = &pid_index_copy;
+    char pids_string[10];
+    
+    //handling signals for ctrl-c, ctrl-z and bg
+    //using code from https://github.com/CSE3320/Code-Samples/blob/master/sigint.c
+    
+    struct sigaction act;
+    struct sigaction sigstp;
+    
+    //set the sigaction struct to null
+    memset(&act, '\0', sizeof(act));
+    
+    memset(&sigstp, '\0', sizeof(sigstp));
+    
+    //Set the handler to use the function handle_signal()
+    act.sa_handler = &handle_signal;
+    
+    sigstp.sa_handler = &handle_signalz;
+    
+    //Install the handler and check the return value.
+    if (sigaction(SIGINT , &act, NULL) < 0) {
+        perror ("sigaction: ");
+    }
+   /////////////////////////////////////////////////////////////
+    
+  if (sigaction(SIGTSTP, &act, NULL) < 0)
+  {
+      perror ("sigstop: ");
+  }
+    
+
     
     while( 1 )
     {
@@ -135,6 +190,7 @@ int main()
         
         /* Parse input */
         char *token[MAX_NUM_ARGUMENTS];
+     //   int pids[MAX_NUM_ARGUMENTS];
         
         int   token_count = 0;
         
@@ -170,9 +226,7 @@ int main()
         cmd_str_copy = strndup(cmd_str, strlen(cmd_str));
         
         commands[command_index] = cmd_str_copy;
-        
-   //     printf("cmd_str: %s", cmd_str_copy);
-        
+        //     printf("cmd_str: %s", cmd_str_copy);
       //  printf("commands are: %s", commands[command_index]);
         command_index++;
         
@@ -192,23 +246,29 @@ int main()
             exit(status);
         }
         
-        /*   else if (!strcmp(token[token_index], "ls"))
-         {
-         ls();
-         } */
+        else if(!strcmp(token[token_index], "bg"))
+        {
+            int last_pid = atoi(pids[(*pid_index)-1]);
+            printf("in bg and lastpid is:%d \n", last_pid);
+            kill (last_pid, SIGCONT);
+        }
+        
+
+        
+        else if (!strcmp(token[token_index], "showpids"))
+        {
+            int i;
+            for(i=0; pids[i] != NULL; i++)
+            {
+                printf("pids%d: %s \n", i , pids[i]);
+                continue;
+            }
+
+        }
         
         else if (!strcmp(token[token_index], "cd"))
         {
             cd(token[token_index + 1]);
-           /* if (!strcmp(token[token_index+1], ".."))
-            {
-                //printf("random string\n");
-                cddot();
-            }
-            else
-            {
-                cd(token[token_index + 1]);
-            } */
         }
         
         
@@ -218,44 +278,49 @@ int main()
             for(i=0; commands[i] != NULL; i++)
             {
                 printf("%d: %s \n", i , commands[i]);
+                continue;
 
             }
         }
-        
-     /*   else if(token[token_index][0] == '!')
-        {
-         //   printf("yay\n");
-            char *number;
-            number = strtok(token[token_index], "!");
-        //    printf("number is: %s\n", number);
-            int num_copy = atoi(number);
-        //    number = commands[(int)number];
-            printf("number: %d\n", num_copy);
-            
-        } */
         
         
         else
         {
             pid_t child_pid = fork();
             
+            //since the pid changes when we fork, we create an array of pointers, as well as an array of string values
+            //for the pids. When it's converted to a string and we take a copy of it and locate it at the desired pointer
+            //address in the array of pointers, we avoid redefining the values.
+            sprintf(pids_string,"%d",child_pid); // convert int values of pid to strings
+            printf("%s\n",pids_string);
+            pids[(*pid_index)] = strdup(pids_string);
+            //printf("%s\n",pids[(*count_pid)]);
             
+            //assure we're only printing up to 10 values
+            if(*pid_index == 10)
+                *pid_index = 0;
+            (*pid_index)++;
+            pids[(*pid_index)] = NULL;
+
             //to check for command not found we fork, and then check the child process
             //if it returns errno2 then we know the command is not found;
             if (child_pid == 0)
             {
+
                 if(token[token_index][0] == '!')
                 {
                     char *number;
                     number = strtok(token[token_index], "!");
                     int num_copy = atoi(number);
-                    printf("number: %d\n", num_copy);
+                   // printf("number: %d\n", num_copy);
                     printf("command: %s\n", commands[num_copy]);
-                 //   strcpy(token, commands[num_copy]);
-                 //   token = commands[num_copy];
+                    //reassign the desired command to prompt line to re-execute it after using !n
+                    token[token_index] = strdup(commands[num_copy]);
+                    token[token_index][strlen(token[token_index])-1] = '\0';
+                    //continue;
                     
                 }
-                else if(execvp(token[token_index], token) < 0)
+                if(execvp(token[token_index], token) < 0)
                 {
                     int error = errno;
                     if (error == 2)
@@ -270,6 +335,7 @@ int main()
             else
             {
                 waitpid(child_pid, &status, 0);
+              //  pause();
                 
             }
 
@@ -277,7 +343,9 @@ int main()
         
 
         free( working_root );
+        
     }
+  //  free(cmd_str_copy);
     return 0;
 }
 
