@@ -50,10 +50,10 @@
 #define MAX_NUM_ARGUMENTS 10     // Mav shell only supports five arguments
 
 
+//for any path passed to cd, insert / at beginning and concatenate it with the rest of the path
+//obtained using getcwd, then use chdir to change directory to the full path
 int cd(char *path)
 {
-    //for any path passed to cd, insert / at beginning and concatenate it with the rest of the path
-    //obtained using getcwd, then use chdir to change directory to the full path
     char cwd[255];
     getcwd(cwd, sizeof(cwd));
     strcat(cwd, "/");
@@ -64,21 +64,15 @@ int cd(char *path)
 
 
 //using https://stackoverflow.com/questions/12683466/after-suspending-child-process-with-sigtstp-shell-not-responding
-//for ctrl-z
+//for ctrl-c
 static void handle_signal(int sig)
 {
     printf (" Caught signal %d\n", sig );
-    
-  /*  switch(sig){
-        case SIGCHLD:
-            waitpid(-1, &status, WNOHANG);
-            printf (" Caught signal %d\n", sig );
-            break;
-    } */
-    
-    
 }
 
+//same as above but for ctrl-z which also needs SIGCHILD handling since it forks, unlike ctrl-c which just stops
+//a running process. using switch allows to handle a subcase, i.e. SIGCHILD. While waitpid allows us to wait for
+//the child process to end before we can break.
 static void handle_signalz(int sig)
 {
     int status;
@@ -144,6 +138,7 @@ int main()
     //using code from https://github.com/CSE3320/Code-Samples/blob/master/sigint.c
     
     struct sigaction act;
+    //changing the code a bit to suit ctrl-z as well as ctrl-c
     struct sigaction sigstp;
     
     //set the sigaction struct to null
@@ -157,15 +152,17 @@ int main()
     sigstp.sa_handler = &handle_signalz;
     
     //Install the handler and check the return value.
-    if (sigaction(SIGINT , &act, NULL) < 0) {
+    if (sigaction(SIGINT , &act, NULL) < 0)
+    {
         perror ("sigaction: ");
     }
-   /////////////////////////////////////////////////////////////
     
-  if (sigaction(SIGTSTP, &act, NULL) < 0)
-  {
-      perror ("sigstop: ");
-  }
+    //Do the same but for SIGTSTP
+    if (sigaction(SIGTSTP, &act, NULL) < 0)
+    {
+          perror ("sigstop: ");
+        
+    }
     
 
     
@@ -190,7 +187,6 @@ int main()
         
         /* Parse input */
         char *token[MAX_NUM_ARGUMENTS];
-     //   int pids[MAX_NUM_ARGUMENTS];
         
         int   token_count = 0;
         
@@ -200,7 +196,7 @@ int main()
         
         char *working_str  = strdup( cmd_str );
         
-        // we are going to move the working_str pointer so
+        // we are going to move the working_str pointer to
         // keep track of its original value so we can deallocate
         // the correct amount at the end
         char *working_root = working_str;
@@ -226,8 +222,7 @@ int main()
         cmd_str_copy = strndup(cmd_str, strlen(cmd_str));
         
         commands[command_index] = cmd_str_copy;
-        //     printf("cmd_str: %s", cmd_str_copy);
-      //  printf("commands are: %s", commands[command_index]);
+
         command_index++;
         
         //we set the next index (after incrementing) to null to give the array an end point so that when we print
@@ -239,45 +234,50 @@ int main()
         int token_index  = 0;
         int status;
        
-        
+        //calling exit(0) will cause the shell to stop the program
         if((!strcmp(token[token_index], "exit")) || (!strcmp(token[token_index], "quit")))
         {
             status = 0;
             exit(status);
         }
         
+        //after storing the pid as a string we need to change it to an integer using atoi
+        //then we call kill on the last pid stored in the array and use SIGCON to continue
+        //the process after suspension
         else if(!strcmp(token[token_index], "bg"))
         {
             int last_pid = atoi(pids[(*pid_index)-1]);
-            printf("in bg and lastpid is:%d \n", last_pid);
+           // printf("lastpid: %d \n", last_pid);
             kill (last_pid, SIGCONT);
         }
         
 
-        
+        //printing all the element in the array pids which stores the PIDs of the last (up to a set number)
         else if (!strcmp(token[token_index], "showpids"))
         {
             int i;
             for(i=0; pids[i] != NULL; i++)
             {
-                printf("pids%d: %s \n", i , pids[i]);
+                printf("pid%d: %s \n", i , pids[i]);
                 continue;
             }
 
         }
-        
+        //calling the cd function introduced above. cd is the 0th index in tokenized input and the
+        //desired directory is the 1st element in the tokenized input so we switch to token_index+1
         else if (!strcmp(token[token_index], "cd"))
         {
             cd(token[token_index + 1]);
         }
         
-        
+        //this is a method to store the commands entered (up to 15) and listing them when needed using
+        //history command
         else if(!strcmp(token[token_index], "history"))
         {
             int i;
             for(i=0; commands[i] != NULL; i++)
             {
-                printf("%d: %s \n", i , commands[i]);
+                printf("%d: %s", i , commands[i]);
                 continue;
 
             }
@@ -292,9 +292,8 @@ int main()
             //for the pids. When it's converted to a string and we take a copy of it and locate it at the desired pointer
             //address in the array of pointers, we avoid redefining the values.
             sprintf(pids_string,"%d",child_pid); // convert int values of pid to strings
-            printf("%s\n",pids_string);
+            //printf("%s\n",pids_string);
             pids[(*pid_index)] = strdup(pids_string);
-            //printf("%s\n",pids[(*count_pid)]);
             
             //assure we're only printing up to 10 values
             if(*pid_index == 10)
@@ -312,12 +311,25 @@ int main()
                     char *number;
                     number = strtok(token[token_index], "!");
                     int num_copy = atoi(number);
-                   // printf("number: %d\n", num_copy);
-                    printf("command: %s\n", commands[num_copy]);
+                    //printf("number: %d\n", num_copy);
                     //reassign the desired command to prompt line to re-execute it after using !n
-                    token[token_index] = strdup(commands[num_copy]);
-                    token[token_index][strlen(token[token_index])-1] = '\0';
+                    //token[token_index] = strdup(commands[num_copy]);
+                    // token[token_index][strlen(token[token_index])-1] = '\0';
                     //continue;
+                    if(num_copy > command_index-1)
+                    {
+                        //when you meet the above condition sometimes the program
+                        //takes a second to be able to "quit" or "exit" works successfully
+                        //I don't really know why.
+                        printf("Command not in history.\n");
+                        goto top;
+                    }
+                    else
+                    {
+                        printf("command: %s", commands[num_copy]);
+                        token[token_index] = strdup(commands[num_copy]);
+                        token[token_index][strlen(token[token_index])-1] = '\0';
+                    }
                     
                 }
                 if(execvp(token[token_index], token) < 0)
@@ -334,9 +346,7 @@ int main()
             }
             else
             {
-                waitpid(child_pid, &status, 0);
-              //  pause();
-                
+                waitpid(child_pid, &status, 0);       
             }
 
         }
