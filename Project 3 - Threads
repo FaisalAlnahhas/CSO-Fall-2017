@@ -1,0 +1,67 @@
+//Faisal ALnahhas
+//UTA - Fall 2017
+//Operating System - Project 3 
+//  mandelseries.c
+//  
+//
+//  Created by Faisal Alnahhas on 10/20/17.
+//
+
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <stdlib.h>
+
+
+
+int main()
+{
+
+    
+    char mandelstring [] = "./mandel -x 0.286932 -y 0.014287 -s 0.0001 -m 1000 -o mandeli.bmp";
+    int i;
+    int x = mandelstring[strlen(mandelstring)-5];
+    int status;
+    //introcue array of strings to tokenize input later
+    char *tokens[20];
+    
+    
+    int t;
+    
+    //tokenize the first entry, i.e. ./mandel then tokenize the rest in the loop below
+    tokens[0] = strtok(mandelstring, " ");
+    printf("first token: %s\n", tokens[0]);
+    for(t=1; tokens[t-1]!=NULL ; t++)
+    {
+        tokens[t] = strtok(NULL, " ");
+        printf("token is: %s\n", tokens[t]);
+        
+    }
+    
+    
+    for (i=0; i<=49; i++)
+    {
+        pid_t child_pid = fork();
+        
+        if(child_pid==0)
+        {
+            //replace the mandeli with numbers from 0 to 49
+            //execute this action every time we fork
+            sprintf(tokens[10], "mandel%d.bmp", i);
+            execvp(tokens[0], tokens);
+
+            exit (EXIT_SUCCESS);
+        }
+        else
+        {
+            waitpid(child_pid, &status, 0);
+            printf("we didn't fork :(\n");
+            
+        }
+        
+    }
+    
+    
+    return 0;
+}
