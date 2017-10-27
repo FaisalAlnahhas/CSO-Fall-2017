@@ -18,16 +18,17 @@
 int main()
 {
 
-    
+    //char *input = (char*) malloc (255);
     char mandelstring [] = "./mandel -x 0.286932 -y 0.014287 -s 0.0001 -m 1000 -o mandeli.bmp";
-    int i;
-    int x = mandelstring[strlen(mandelstring)-5];
+    int i, x , t, j;
+    int count = 0;
     int status;
+
     //introcue array of strings to tokenize input later
     char *tokens[20];
     
     
-    int t;
+    int n =3;
     
     //tokenize the first entry, i.e. ./mandel then tokenize the rest in the loop below
     tokens[0] = strtok(mandelstring, " ");
@@ -38,8 +39,52 @@ int main()
         printf("token is: %s\n", tokens[t]);
         
     }
+
+    
+  /*  for (i=0; i<49; i= i+n)
+    {
+        printf("n is: %d\n", n);
+        printf("i is: %d\n", i);
+        for(j=0; j<n; j++)
+        {
+            pid_t child_pid = fork();
+            if(child_pid == 0)
+            {
+                sprintf(tokens[10], "mandel%d.bmp\n", count);
+                printf("count is: %d\n", count);
+                printf("count now is: %d\n", count);
+                execvp(tokens[0], tokens);
+                printf("token[10]: %s", tokens[10]);
+                exit(EXIT_SUCCESS);
+            }
+            else
+            {
+                waitpid(child_pid, &status, 0);
+                printf("no fork\n");
+            }
+            count++;
+        }
+    }
+    n = 50%n;
+    for(x=0; x<=n-1; x++)
+    {
+        pid_t child_pid = fork();
+        if(child_pid == 0)
+        {
+            sprintf(tokens[10], "mandel%d.bmp\n", count);
+            execvp(tokens[0], tokens);
+            exit(EXIT_SUCCESS);
+        }
+        else
+        {
+            waitpid(child_pid, &status, 0);
+            printf("no fork\n");
+        }
+        count++;
+    } */
     
     
+                
     for (i=0; i<=49; i++)
     {
         pid_t child_pid = fork();
@@ -50,7 +95,7 @@ int main()
             //execute this action every time we fork
             sprintf(tokens[10], "mandel%d.bmp", i);
             execvp(tokens[0], tokens);
-
+            printf("tokens[i]: %s\n", tokens[i]);
             exit (EXIT_SUCCESS);
         }
         else
