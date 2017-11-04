@@ -40,10 +40,21 @@ void *funny(void *x)
     
 }
 
+struct args_struct {
+    struct bm;
+    double xmin;
+    double xmax;
+    double ymin;
+    double ymax;
+    int max;
+    int start2;
+    int end2;
+}args;
+
 int main( int argc, char *argv[] )
 {
     char c;
-    pthread_t tid;
+    
     int i;
     
     
@@ -57,8 +68,9 @@ int main( int argc, char *argv[] )
     int    image_width = 500;
     int    image_height = 500;
     int    max = 1000;
-    int    nvalue;
-    
+    int    nvalue = 1;
+    int    start  = 0;
+    pthread_t tids[nvalue];
     // For each command line argument given,
     // override the appropriate configuration value.
     
@@ -95,20 +107,42 @@ int main( int argc, char *argv[] )
                 break;
         }
     }
+    int    new_height = floor(image_height/nvalue);
+    int    end = new_height;
     
     // Display the configuration of the image.
     printf("mandel: x=%lf y=%lf scale=%lf max=%d outfile=%s\n",xcenter,ycenter,scale,max,outfile);
     
+    args.xmin = xcenter - scale;
+    args.xmax = xcenter + scale;
+    args.ymin = ycenter - scale;
+    args.ymax = ycenter + scale;
+    args.max = max;
+    args.start2 = start;
+    args.end2 = end;
+    
+    struct bitmap *bm = bitmap_create(image_width,image_height);
+    
     for (i=0; i< nvalue; i++)
     {
-        pthread_create(&tid, NULL, funny, (void *)nvalue);
+        printf("start= %d\n", start);
+        printf("end= %d\n", end);
+        pthread_create(&tids[i], NULL, compute_image, (void *)&args);
+        start += new_height;
+        end += new_height;
         printf("thread created\n");
+
+    }
+    
+    for(i=0; i<nvalue; i++)
+    {
+        pthread_join(tids[i], NULL);
     }
     
     pthread_exit(NULL);
     
     // Create a bitmap of the appropriate size.
-    struct bitmap *bm = bitmap_create(image_width,image_height);
+    //struct bitmap *bm = bitmap_create(image_width,image_height);
     
     // Fill it with a dark blue, for debugging
     bitmap_reset(bm,MAKE_RGBA(0,0,255,0));
@@ -130,7 +164,7 @@ int main( int argc, char *argv[] )
  Scale the image to the range (xmin-xmax,ymin-ymax), limiting iterations to "max"
  */
 
-void compute_image( struct bitmap *bm, double xmin, double xmax, double ymin, double ymax, int max )
+void compute_image( struct bitmap *bm, double xmin, double xmax, double ymin, double ymax, int max, int begin, int finish )
 {
     int i,j;
     
@@ -139,13 +173,13 @@ void compute_image( struct bitmap *bm, double xmin, double xmax, double ymin, do
     
     // For every pixel in the image...
     
-    for(j=0;j<height;j++) {
+    for(j=begin;j<finish;j++) {
         
         for(i=0;i<width;i++) {
             
             // Determine the point in x,y space for that pixel.
             double x = xmin + i*(xmax-xmin)/width;
-            double y = ymin + j*(ymax-ymin)/height;
+            double y = ymin + j*(ymax-ymin)/finish;
             
             // Compute the iterations at that point.
             int iters = iterations_at_point(x,y,max);
