@@ -20,7 +20,7 @@ int iterations_at_point( double x, double y, int max );
 
 //since pthread_create takes one argument for the function passed
 //we change compute_image to accept a single argument, a structure
-void compute_image( void *arguments );
+void * compute_image( void *arguments );
 
 void show_help()
 {
@@ -50,6 +50,7 @@ struct args_struct {
     int end2;
     int height;
     int width;
+    const char *outfile;
 }args;
 
 int main( int argc, char *argv[] )
@@ -126,10 +127,11 @@ int main( int argc, char *argv[] )
     args.end2 = new_end;
     
     //use the values from the structure to create the bitmap
-    struct bitmap *bm = bitmap_create(image_width,image_height);
-    args.width = bitmap_width(bm);
-    args.height = bitmap_height(bm);
-    
+   // struct bitmap *bm = bitmap_create(image_width,image_height);
+   // bitmap_reset(bm,MAKE_RGBA(0,0,255,0));
+    args.width = image_width;
+    args.height = image_height;
+    args.outfile = outfile;
     
     
     
@@ -142,7 +144,7 @@ int main( int argc, char *argv[] )
     //struct bitmap *bm = bitmap_create(image_width,image_height);
     
     // Fill it with a dark blue, for debugging
-    bitmap_reset(bm,MAKE_RGBA(0,0,255,0));
+    //bitmap_reset(bm,MAKE_RGBA(0,0,255,0));
     
     // Compute the Mandelbrot image
     //compute_image(&args);
@@ -159,7 +161,7 @@ int main( int argc, char *argv[] )
         //passing in thread IDs, no attributes, the function
         //we wish to spawn threads from, and a pointer to its
         //parameter, i.e. the structure defined above
-        pthread_create(&tids[i], NULL, compute_image, (void *)&args);
+        pthread_create(&tids[i], NULL, &compute_image, (void *)&args);
         start += new_height;
         new_end += new_height;
         printf("thread created\n");
@@ -172,10 +174,10 @@ int main( int argc, char *argv[] )
     }
     
     // Save the image in the stated file.
-    if(!bitmap_save(bm,outfile)) {
+   /* if(!bitmap_save(bm,outfile)) {
         fprintf(stderr,"mandel: couldn't write to %s: %s\n",outfile,strerror(errno));
         return 1;
-    }
+    }*/
     
     gettimeofday(&end, NULL);
     int time_duration = ((end.tv_sec - begin.tv_sec) * 1000000 + (end.tv_usec - begin.tv_usec));
@@ -190,15 +192,17 @@ int main( int argc, char *argv[] )
  */
 
 
-void compute_image( void *arguments )
+void * compute_image( void *arguments )
 {
     struct args_struct *args = (struct args_struct *) arguments;
     int i,j;
+    const char* outputfile = args->outfile;
     
-    struct bitmap *bm = bitmap_create(args->width, args->height);
+    struct bitmap *bm = bitmap_create(args->width, args->end2);
+    bitmap_reset(bm,MAKE_RGBA(0,0,255,0));
     
     int width = args->width;
-    int height = args->height;
+    //int height = args->end2;
     
     // For every pixel in the image...
     
@@ -217,7 +221,14 @@ void compute_image( void *arguments )
             
             // Set the pixel in the bitmap.
             bitmap_set(bm,i,j,iters);
+            
+            
         }
+    }
+    
+    if(!bitmap_save(bm,outputfile)) {
+        fprintf(stderr,"mandel: couldn't write to %s: %s\n",outputfile,strerror(errno));
+        //return 1;
     }
 }
 
