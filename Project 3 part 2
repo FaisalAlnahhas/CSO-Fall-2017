@@ -124,15 +124,12 @@ int main( int argc, char *argv[] )
     args.ymax = ycenter + scale;
     args.max = max;
     args.start2 = start;
-    args.end2 = new_end;
+    args.end2 = image_height;
     
     //use the values from the structure to create the bitmap
-   // struct bitmap *bm = bitmap_create(image_width,image_height);
-   // bitmap_reset(bm,MAKE_RGBA(0,0,255,0));
     args.width = image_width;
     args.height = image_height;
     args.outfile = outfile;
-    
     
     
     // Create a bitmap of the appropriate size.
@@ -148,9 +145,7 @@ int main( int argc, char *argv[] )
     
     // Compute the Mandelbrot image
     //compute_image(&args);
-    
 
-    
     gettimeofday(&begin, NULL);
     
     //create n threads using thread IDs
@@ -221,15 +216,18 @@ void * compute_image( void *arguments )
             
             // Set the pixel in the bitmap.
             bitmap_set(bm,i,j,iters);
-            
+            //printf("end2 is: %d\n", args->end2);
             
         }
+    
     }
+    
     
     if(!bitmap_save(bm,outputfile)) {
         fprintf(stderr,"mandel: couldn't write to %s: %s\n",outputfile,strerror(errno));
         //return 1;
     }
+    return 0;
 }
 
 /*
