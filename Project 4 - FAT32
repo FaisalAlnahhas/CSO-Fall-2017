@@ -50,6 +50,13 @@
 //Changing it to 10 per requirement of project
 #define MAX_NUM_ARGUMENTS 10     // Mav shell only supports five arguments
 
+
+short BPB_BytesPerSec;
+unsigned char BPB_SecPerClus;
+int BPB_FATSz32;
+unsigned char BPB_NumFATS;
+short BPB_RsvdSecCnt;
+
 struct __attribute__((__packed__)) DirectoryEntry {
     char        DIR_Name[11];
     uint8_t     DIR_Attr;
@@ -126,7 +133,7 @@ void file_close()
     fclose(fc);
 }
 
-void get_info(FILE *fc)
+/*void get_info(FILE *fc)
 {
     int n = 2;
     int bytes = 512;
@@ -155,7 +162,7 @@ void get_info(FILE *fc)
     fread(&val_F32, 2, 1, fc);
     printf("BPB_FATSz32: %d\n", val_F32);
     
-  /*  long root_dir = (Info->BPB_NumFATS * Info->BPB_FATSz32 * Info->BPB_BytesPerSec) + (Info->BPB_RsvdSecCnt * Info->BPB_BytesPerSec);
+    long root_dir = (Info->BPB_NumFATS * Info->BPB_FATSz32 * Info->BPB_BytesPerSec) + (Info->BPB_RsvdSecCnt * Info->BPB_BytesPerSec);
     fseek(root_dir, 11, SEEK_SET);
     
     for(i=0; i<16; i++)
@@ -163,18 +170,42 @@ void get_info(FILE *fc)
         fread(dir, sizeof(dir), 32, fc);
         printf("%d\n", i);
         printf("%02X\n", i);
-    } */
+    }
+    
+} */
+
+void stats(FILE *fc, char *passed_file)
+{
+    int i;
+    char *name = passed_file;
+    long root_dir = (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec) + (BPB_RsvdSecCnt * BPB_BytesPerSec);
+    fseek(fc, root_dir, SEEK_SET);
+    for(i=0; i<16; i++)
+    {
+        memset(&dir[i].DIR_Name, 0, 11);
+        fread(&dir[i], 32, 1 , fc);
+       // memset(name, 0 , 12);
+       // strncpy(&name[0], dir[i].DIR_Name, 11);
+        
+    }
+    
+    for(i=0;i<16;i++)
+    {
+        if(dir[i].DIR_Attr == 0x10 || dir[i].DIR_Attr == 0x20) printf("Filename: %s\n", dir[i].DIR_Name);
+    }
+
+    
+    
+    
+    
+    
+    /*int val_attr;
+    fseek(fc, 11, SEEK_SET);
+    fread(&val_attr,1,1,fc);
+    printf("DIR_ATTR: %d\n", val_attr); */
     
 }
 
-void stats(FILE *fc)
-{
-    int val_attr;
-    fseek(fc, 11, SEEK_SET);
-    fread(&val_attr,1,1,fc);
-    printf("DIR_ATTR: %d\n", val_attr);
-    
-}
 
 int main()
 {
@@ -192,6 +223,9 @@ int main()
     int pid_index_copy = 0; //to avoid memory collision use a copy of pid_index
     
     FILE *fopened;
+    
+    
+    
     
     
     while( 1 )
@@ -262,14 +296,34 @@ int main()
                 fopened = file_open(token[token_index + 1]);
                 open_image += 1;
                 close_image = 0;
+                fseek(fopened, 11, SEEK_SET);
+                fread(&BPB_BytesPerSec, 2, 1, fopened);
+                
+                fseek(fopened, 13, SEEK_SET);//SecPerClus
+                fread(&BPB_SecPerClus, 1, 1, fopened);
+                
+                
+                fseek(fopened, 36, SEEK_SET);//FATSz32
+                fread(&BPB_FATSz32, 4, 1, fopened);
+                
+                
+                fseek(fopened, 16, SEEK_SET);//NumFATs
+                fread(&BPB_NumFATS, 2, 1, fopened);
+                
+                
+                fseek(fopened, 14, SEEK_SET);//Rsvd
+                fread(&BPB_RsvdSecCnt, 2, 1, fopened);
             }
+            
             
             else if (!strcmp(token[token_index], "close"))
             {
                 printf("Error: File system not open.\n");
             }
             
+            
         }
+        
         
         else if((open_image == 1) && (close_image == 0))
         {
@@ -287,15 +341,48 @@ int main()
             else if (!strcmp(token[token_index], "info"))
             {
                 printf("information: \n");
-                get_info(fopened);
+                
+                printf("BPB_BytesPerSec: %d\n", BPB_BytesPerSec);
+                
+                printf("BPB_SecPerClus: %d\n", BPB_SecPerClus);
+               
+                printf("BPB_FATSz32: %d\n", BPB_FATSz32);
+                
+                printf("BPB_NumFATS: %d\n", BPB_NumFATS);
+                
+                printf("BPB_RsvdSecCnt: %d\n", BPB_RsvdSecCnt);
+                
             }
             else if (!strcmp(token[token_index], "stat"))
             {
-                printf("stat is: \n");
-                char *stat_file = token[token_index+1];
-                FILE *stat_file_ptr = fopen(stat_file, "r");
-                stats(stat_file_ptr);
-                fclose(stat_file_ptr);
+                int i;
+                char *name = token[token_index + 1];
+                int root_dir = (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec) + (BPB_RsvdSecCnt * BPB_BytesPerSec);
+                fseek(fopened, root_dir, SEEK_SET);
+                printf("root_dir: %d\n", root_dir);
+                for(i=0; i<16; i++)
+                {
+                    memset(&dir[i].DIR_Name, 0, 11);
+                    fread(&dir[i], 32, 1 , fopened);
+
+                    
+                }
+                
+                for(i=0;i<16;i++)
+                {
+                    if(dir[i].DIR_Attr == 0x10 || dir[i].DIR_Attr == 0x20)
+                        if ((!strcmp(name, dir[i].DIR_Name)))
+                    {
+                        memset(name, 0 , 12);
+                        strncpy(&name[0], dir[i].DIR_Name, 11);
+                        printf("Filename: %s\n", name);
+                        printf("First Cluster: %d\n", dir[i].DIR_FirstClusterLow);
+                        printf("File Size: %d\n", dir[i].DIR_FileSize);
+                        printf("\n");
+                    }
+                }
+                
+
             }
             else if (!strcmp(token[token_index], "close"))
             {
