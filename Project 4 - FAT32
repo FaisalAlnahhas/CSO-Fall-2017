@@ -57,6 +57,7 @@ unsigned char BPB_SecPerClus;
 int BPB_FATSz32;
 unsigned char BPB_NumFATS;
 short BPB_RsvdSecCnt;
+char BS_VolLab[11];
 
 struct __attribute__((__packed__)) DirectoryEntry {
     char        DIR_Name[11];
@@ -69,10 +70,56 @@ struct __attribute__((__packed__)) DirectoryEntry {
 };
 struct DirectoryEntry dir[16];
 
+int LBAToOffset(int32_t sector)
+{
+    return ((sector - 2) * BPB_BytesPerSec) + (BPB_BytesPerSec * BPB_RsvdSecCnt) + (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec);
+}
+
+int current_working(char *path)
+{
+    char cwd[255];
+    getcwd(cwd, sizeof(cwd));
+    strcat(cwd, "/");
+    strcat(cwd, path);
+    printf("cwd: %s\n", cwd);
+    return 0;
+}
+
+int NextLB(uint32_t sector)
+{
+    FILE *fp;
+    uint32_t FATAddress = (BPB_BytesPerSec * BPB_RsvdSecCnt) + (sector * 4);
+    int16_t val;
+    fseek(fp, FATAddress, SEEK_SET);
+    fread(&val, 2, 1, fp);
+    return val;
+}
+
+void read_file(FILE *fp, int pos, int num_bytes, int file_num)
+{
+    int block = dir[file_num].DIR_FirstClusterLow;
+    int file_size = dir[file_num].DIR_FileSize;
+    printf("block is: %d\n", block);
+    while(pos > 512)
+    {
+        block = NextLB(block);
+        printf("block now is: %d\n", block);
+        pos -= 512;
+    }
+    
+    int file_offset = LBAToOffset(block);
+    printf("file offset %d\n", file_offset);
+    fseek(fp, file_offset + pos, SEEK_SET);
+    printf("file offset now %d\n", file_offset);
+    uint8_t val[file_size];
+    fread(&val, num_bytes, 1, fp);
+    printf("val: %s\n", val);
+}
+
 
 //for any path passed to cd, insert / at beginning and concatenate it with the rest of the path
 //obtained using getcwd, then use chdir to change directory to the full path
-/*int cd(char *path, FILE *cdf)
+/*void cd(char *path, FILE *cdf)
 {
     //convert to all caps
     //see if it's in dir[]
@@ -81,29 +128,40 @@ struct DirectoryEntry dir[16];
     //fseek with new offset
     //populate the directory
     //..
-    char *new_path = correct_name(path);
-    int32_t firstClus;
+    char new_path[strlen(correct_name(path))];
+    strcpy(new_path, correct_name(path));
+    char *name;
     
-    int i;
+    int i, firstClus;
     for(i=0; i<16; i++)
     {
-        if(&dir[i].DIR_Name == path)
+        memset(name, 0 , 12);
+        strncpy(&name[0], dir[i].DIR_Name, 11);
+        if(!strcmp(name, new_path))
         {
             firstClus = dir[i].DIR_FirstClusterLow;
         }
     }
-    fseek(cdf, firstClus, SEEK_SET);
+    int new_offset = LBAToOffset(firstClus);
+    fseek(cdf, new_offset, SEEK_SET);
     for(i=0; i<16; i++)
     {
         memset(&dir[i].DIR_Name, 0, 11);
         fread(&dir[i], 32, 1 , cdf);
-        
     }
+    
+    printf("cd\n");
     
 } */
 
 void ls()
 {
+    //char *dir_name;
+    //correct_name(dir_name);
+    //char *correct_dir_name;
+    //strcpy(correct_dir_name, dir_name);
+    //memset(correct_dir_name, 0 , 12);
+    //strncpy(&correct_dir_name[0], dir[correct_dir_name].DIR_Name, 11);
     int i;
     printf("listed files: \n");
     for(i=0; i<16; i++)
@@ -160,9 +218,6 @@ void stats(FILE *fc, char *passed_file)
     {
         memset(&dir[i].DIR_Name, 0, 11);
         fread(&dir[i], 32, 1 , fc);
-       // memset(name, 0 , 12);
-       // strncpy(&name[0], dir[i].DIR_Name, 11);
-        
     }
     
     for(i=0;i<16;i++)
@@ -170,17 +225,17 @@ void stats(FILE *fc, char *passed_file)
         if(dir[i].DIR_Attr == 0x10 || dir[i].DIR_Attr == 0x20) printf("Filename: %s\n", dir[i].DIR_Name);
     }
 
-    /*int val_attr;
-    fseek(fc, 11, SEEK_SET);
-    fread(&val_attr,1,1,fc);
-    printf("DIR_ATTR: %d\n", val_attr); */
     
 }
 
-
-int LBAToOffset(int32_t sector)
+void get_file(char *f, FILE *fp, int file_size)
 {
-    return ((sector - 2) * BPB_BytesPerSec) + (BPB_BytesPerSec * BPB_RsvdSecCnt) + (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec);
+    int i, firstClus;
+    FILE *fw = fopen(f, "w");
+    uint8_t val[file_size];
+    fread(&val, file_size, 1, fp);
+    fwrite(&val, sizeof(val), 1, fw);
+    fclose(fw);
 }
 
 
@@ -193,7 +248,7 @@ char *correct_name(char input[11])
     //printf("input_copy: %s\n", input_copy);
     int index = 0;
     
-    for(i = 0; i<l ; i++)
+    for(i = 0; i<l || index<11; i++)
     {
         //printf("input[i]: %c\n", input[i]);
         //printf("%lu\n", strlen(input));
@@ -205,7 +260,7 @@ char *correct_name(char input[11])
             index++;
         }
 
-        else
+        else if(input[i]=='.')
         {
             for(i2=0; i2<(11-3-i); i2++)
             {
@@ -213,6 +268,11 @@ char *correct_name(char input[11])
                 index++;
             }
 
+        }
+        else
+        {
+            input_copy[index]= ' ';
+            index++;
         }
     }
     input_copy[index] = '\0';
@@ -240,7 +300,7 @@ int main()
     
     FILE *fopened;
     
-    
+    int root_dir = (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec) + (BPB_RsvdSecCnt * BPB_BytesPerSec);
     
     
     
@@ -299,45 +359,53 @@ int main()
             exit(status);
         }
         
+        
+        else if((!strcmp(token[token_index], "open")))
+        {
+            if (open_image == 0)
+            {
+                int i;
+                fopened = file_open(token[token_index + 1]);
+                if(fopened != NULL)
+                {
+                    printf("Image file opened.\n");
+                    open_image += 1;
+                    close_image = 0;
+                    fseek(fopened, 11, SEEK_SET);
+                    fread(&BPB_BytesPerSec, 2, 1, fopened);
+                    
+                    fseek(fopened, 13, SEEK_SET);//SecPerClus
+                    fread(&BPB_SecPerClus, 1, 1, fopened);
+                    
+                    
+                    fseek(fopened, 36, SEEK_SET);//FATSz32
+                    fread(&BPB_FATSz32, 4, 1, fopened);
+                    
+                    
+                    fseek(fopened, 16, SEEK_SET);//NumFATs
+                    fread(&BPB_NumFATS, 2, 1, fopened);
+                    
+                    
+                    fseek(fopened, 14, SEEK_SET);//Rsvd
+                    fread(&BPB_RsvdSecCnt, 2, 1, fopened);
+                    
+                    int root_dir = (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec) + (BPB_RsvdSecCnt * BPB_BytesPerSec);
+                   
+                    fseek(fopened, root_dir, SEEK_SET);
+                    for(i=0; i<16; i++)
+                    {
+                        memset(&dir[i].DIR_Name, 0, 11);
+                        fread(&dir[i], 32, 1 , fopened);
+                    }
+                }
+            }
+
+            
+        }
+        
         else if(open_image==0 && close_image==1)
         {
             printf("Error: File system image must be opened first.\n");
-        }
-        
-        else if(open_image == 0)
-        {
-            if (!strcmp(token[token_index], "open"))
-            {
-                printf("Image file opened.\n");
-                fopened = file_open(token[token_index + 1]);
-                open_image += 1;
-                close_image = 0;
-                fseek(fopened, 11, SEEK_SET);
-                fread(&BPB_BytesPerSec, 2, 1, fopened);
-                
-                fseek(fopened, 13, SEEK_SET);//SecPerClus
-                fread(&BPB_SecPerClus, 1, 1, fopened);
-                
-                
-                fseek(fopened, 36, SEEK_SET);//FATSz32
-                fread(&BPB_FATSz32, 4, 1, fopened);
-                
-                
-                fseek(fopened, 16, SEEK_SET);//NumFATs
-                fread(&BPB_NumFATS, 2, 1, fopened);
-                
-                
-                fseek(fopened, 14, SEEK_SET);//Rsvd
-                fread(&BPB_RsvdSecCnt, 2, 1, fopened);
-            }
-            
-            
-            else if (!strcmp(token[token_index], "close"))
-            {
-                printf("Error: File system not open.\n");
-            }
-            
-            
         }
         
         
@@ -347,12 +415,73 @@ int main()
             //desired directory is the 1st element in the tokenized input so we switch to token_index+1
             if (!strcmp(token[token_index], "cd"))
             {
-                break;//cd(token[token_index + 1]);
+                int i, firstClus;
+                char *path = token[token_index+1];
+                char *path_copy = path;
+                char new_path[strlen(correct_name(path))];
+                strcpy(new_path, correct_name(path));
+                for(i=0; i<16; i++)
+                {
+                    memset(path, 0 , 12);
+                    strncpy(&path[0], dir[i].DIR_Name, 11);
+                    if(dir[i].DIR_Attr == 0x10)
+                    {
+                        if(!strcmp(path, new_path))
+                        {
+                            firstClus = dir[i].DIR_FirstClusterLow;
+                        }
+                    }
+                }
+                int new_offset = LBAToOffset(firstClus);
+                fseek(fopened, new_offset, SEEK_SET);
+                for(i=0; i<16; i++)
+                {
+                    memset(&dir[i].DIR_Name, 0, 11);
+                    fread(&dir[i], 32, 1 , fopened);
+                }
+                current_working(path_copy);
             }
             
             else if (!strcmp(token[token_index], "ls"))
             {
-                ls();
+                int i, new_offset, firstClus;
+                char name[12];
+                for(i=0;i<16;i++)
+                {
+                    if(dir[i].DIR_Attr == 0x10 || dir[i].DIR_Attr == 0x20)
+                    {
+                        memset(name, 0, 12);
+                        strncpy(&name[0], dir[i].DIR_Name, 11);
+                        printf("Filename: %s\n", name);
+                    }
+                }
+            }
+            
+            else if (!strcmp(token[token_index], "read"))
+            {
+                char *file_name = token[token_index+1];
+                int pos = atoi(token[token_index+2]);
+                int num_bytes = atoi(token[token_index+3]);
+                char new_file_name[strlen(correct_name(file_name))];
+                strcpy(new_file_name, correct_name(file_name));
+                int i, firstClus, file_num;
+                for(i=0; i<16; i++)
+                {
+                    memset(file_name, 0, 12);
+                    strncpy(&file_name[0], dir[i].DIR_Name, 11);
+                    if(dir[i].DIR_Attr == 0x10 ||  dir[i].DIR_Attr == 0x20)
+                    {
+                        if(!strcmp(new_file_name, file_name))
+                        {
+                            printf("Filename: %s\n", file_name);
+                            firstClus = dir[i].DIR_FirstClusterLow;
+                            file_num = i;
+                            printf("first cluster: %d\n", firstClus);
+                        }
+                        
+                    }
+                }
+                read_file(fopened, pos, num_bytes, file_num);
             }
             
             else if (!strcmp(token[token_index], "open"))
@@ -362,17 +491,11 @@ int main()
             else if (!strcmp(token[token_index], "info"))
             {
                 printf("information: \n");
-                
                 printf("BPB_BytesPerSec: %d\n", BPB_BytesPerSec);
-                
                 printf("BPB_SecPerClus: %d\n", BPB_SecPerClus);
-               
                 printf("BPB_FATSz32: %d\n", BPB_FATSz32);
-                
                 printf("BPB_NumFATS: %d\n", BPB_NumFATS);
-                
                 printf("BPB_RsvdSecCnt: %d\n", BPB_RsvdSecCnt);
-                
             }
             else if (!strcmp(token[token_index], "stat"))
             {
@@ -410,9 +533,44 @@ int main()
                     }
                     
                 }
-                
-
             }
+            
+            else if (!strcmp(token[token_index], "volume"))
+            {
+                fseek(fopened, 43, SEEK_SET);
+                fread(&BS_VolLab, 11, 1, fopened);
+                if(!strcmp("NO NAME    ", BS_VolLab)) printf("Volume name not found.\n");
+                printf("volume: %s\n", BS_VolLab);
+            }
+            
+            else if (!strcmp(token[token_index], "get"))
+            {
+                char *name = token[token_index + 1];
+                int i, firstClus, file_size;
+                //char *file_name = name;
+                char get_name[strlen(correct_name(name))];
+                strcpy(get_name, correct_name(name));
+                for(i=0;i<16;i++)
+                {
+                    if(dir[i].DIR_Attr == 0x10 || dir[i].DIR_Attr == 0x20)
+                    {
+                        memset(name, 0 , 12);
+                        strncpy(&name[0], dir[i].DIR_Name, 11);
+                        if ((!strcmp(get_name, name)))
+                        {
+                            firstClus = dir[i].DIR_FirstClusterLow;
+                            file_size = dir[i].DIR_FileSize;
+                            printf("file size: %d\n", dir[i].DIR_FileSize);
+                        }
+                    }
+                    
+                }
+                int new_offset = LBAToOffset(firstClus);
+                fseek(fopened, new_offset, SEEK_SET);
+                get_file(get_name, fopened, file_size);
+            }
+            
+            
             else if (!strcmp(token[token_index], "close"))
             {
                 file_close();
@@ -422,9 +580,14 @@ int main()
             }
             
         }
+        else if (!strcmp(token[token_index], "close"))
+        {
+            printf("Error: File system not open.\n");
+        }
+        
         else
         {
-            printf("Bananas.\n");
+            printf("Error: File system image must be opened first.\n");
         }
         
        
