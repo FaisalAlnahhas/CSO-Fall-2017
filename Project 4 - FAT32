@@ -1,10 +1,10 @@
 ////Faisal Alnahhas
 //UT Arlington - Fall 2017
-//OS - Project 2 Writing a Shell
-//  msh.c
+//OS - Project 4 FAT32
+//  mfs.c
 //
 //
-//  Created by Faisal Alnahhas on 10/8/17.
+//  Created by Faisal Alnahhas on 12/5/17.
 //
 
 // The MIT License (MIT)
@@ -99,21 +99,36 @@ void read_file(FILE *fp, int pos, int num_bytes, int file_num)
 {
     int block = dir[file_num].DIR_FirstClusterLow;
     int file_size = dir[file_num].DIR_FileSize;
-    printf("block is: %d\n", block);
+    uint8_t val[file_size];
+    int file_offset = LBAToOffset(block);
+    //printf("block is: %d\n", block);
     while(pos > 512)
     {
         block = NextLB(block);
-        printf("block now is: %d\n", block);
+        //printf("block now is: %d\n", block);
         pos -= 512;
     }
     
-    int file_offset = LBAToOffset(block);
-    printf("file offset %d\n", file_offset);
-    fseek(fp, file_offset + pos, SEEK_SET);
-    printf("file offset now %d\n", file_offset);
-    uint8_t val[file_size];
-    fread(&val, num_bytes, 1, fp);
-    printf("val: %s\n", val);
+    if(pos + num_bytes > 512)
+    {
+        pos = 512-pos;
+        //printf("in +_bytes %d\n", pos);
+        fseek(fp, file_offset, SEEK_SET);
+        //printf("file offset in + %d\n", file_offset);
+        fread(&val, pos, 1, fp);
+        printf("val: %s\n", val);
+        
+    }
+    
+    else
+    {
+        //printf("file offset %d\n", file_offset);
+        //printf("pos value is :%d\n",pos);
+        fseek(fp, file_offset + pos, SEEK_SET);
+        //printf("file offset now %d\n", file_offset);
+        fread(&val, num_bytes, 1, fp);
+        printf("val: %s\n", val);
+    }
 }
 
 
@@ -243,7 +258,8 @@ int main()
     
     FILE *fopened;
     
-    int root_dir = (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec) + (BPB_RsvdSecCnt * BPB_BytesPerSec);
+    int root_dir;
+    //printf("root dir before %d\n", root_dir);
     
     
     
@@ -358,32 +374,72 @@ int main()
             //desired directory is the 1st element in the tokenized input so we switch to token_index+1
             if (!strcmp(token[token_index], "cd"))
             {
+                int root_dir = (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec) + (BPB_RsvdSecCnt * BPB_BytesPerSec);
                 int i, firstClus;
                 char *path = token[token_index+1];
-                char *path_copy = path;
-                char new_path[strlen(correct_name(path))];
-                strcpy(new_path, correct_name(path));
-                for(i=0; i<16; i++)
+                if (!strcmp(path, ".."))
                 {
-                    memset(path, 0 , 12);
-                    strncpy(&path[0], dir[i].DIR_Name, 11);
-                    if(dir[i].DIR_Attr == 0x10)
+                    for(i=0; i<16; i++)
                     {
-                        if(!strcmp(path, new_path))
+                        memset(path, 0 , 12);
+                        strncpy(&path[0], dir[i].DIR_Name, 11);
+                       // printf("path after copy: %s\n", path);
+                        if(!strcmp(path, "..         "))
                         {
                             firstClus = dir[i].DIR_FirstClusterLow;
+                            break;
+                        }
+                       // printf("first cluster: %d\n", firstClus);
+                        
+                    }
+                    printf("first cluster: %d\n", firstClus);
+                    if (firstClus == 0)
+                    {
+                        fseek(fopened, root_dir, SEEK_SET);
+                        for(i=0; i<16; i++)
+                        {
+                            memset(&dir[i].DIR_Name, 0, 11);
+                            fread(&dir[i], 32, 1 , fopened);
+                        }
+                    }
+                    else
+                    {
+                        int new_offset = LBAToOffset(firstClus);
+                        fseek(fopened, new_offset, SEEK_SET);
+                        for(i=0; i<16; i++)
+                        {
+                            memset(&dir[i].DIR_Name, 0, 11);
+                            fread(&dir[i], 32, 1 , fopened);
                         }
                     }
                 }
-                int new_offset = LBAToOffset(firstClus);
-                fseek(fopened, new_offset, SEEK_SET);
-                for(i=0; i<16; i++)
+                else
                 {
-                    memset(&dir[i].DIR_Name, 0, 11);
-                    fread(&dir[i], 32, 1 , fopened);
-                    printf("dir[i] is %s\n",dir[i].DIR_Name);
+                    char *path_copy = path;
+                    char new_path[strlen(correct_name(path))];
+                    strcpy(new_path, correct_name(path));
+                    for(i=0; i<16; i++)
+                    {
+                        memset(path, 0 , 12);
+                        strncpy(&path[0], dir[i].DIR_Name, 11);
+                        if(dir[i].DIR_Attr == 0x10)
+                        {
+                            if(!strcmp(path, new_path))
+                            {
+                                firstClus = dir[i].DIR_FirstClusterLow;
+                            }
+                        }
+                    }
+                    int new_offset = LBAToOffset(firstClus);
+                    fseek(fopened, new_offset, SEEK_SET);
+                    for(i=0; i<16; i++)
+                    {
+                        memset(&dir[i].DIR_Name, 0, 11);
+                        fread(&dir[i], 32, 1 , fopened);
+                        //printf("dir[i] is %s\n",dir[i].DIR_Name);
+                    }
                 }
-                current_working(path_copy);
+                //current_working(path_copy);
             }
             
             else if (!strcmp(token[token_index], "ls"))
@@ -395,10 +451,10 @@ int main()
                     memset(name, 0, 12);
                     strncpy(&name[0], dir[i].DIR_Name, 11);
                     
-                    if(dir[i].DIR_Attr == 0x10 || dir[i].DIR_Attr == 0x20)
+                    if((dir[i].DIR_Attr == 0x10 || dir[i].DIR_Attr == 0x20))
                     {
-                        
-                        printf("Filename: %s\n", name);
+                        printf("dir[0] %c\n", dir[i].DIR_Name[0]);
+                        if(name[0] != '?') printf("Filename: %s\n", name);
                     }
                 }
             }
@@ -419,10 +475,10 @@ int main()
                     {
                         if(!strcmp(new_file_name, file_name))
                         {
-                            printf("Filename: %s\n", file_name);
+                            //printf("Filename: %s\n", file_name);
                             firstClus = dir[i].DIR_FirstClusterLow;
                             file_num = i;
-                            printf("first cluster: %d\n", firstClus);
+                            //printf("first cluster: %d\n", firstClus);
                         }
                         
                     }
@@ -459,6 +515,7 @@ int main()
             }
             else if (!strcmp(token[token_index], "stat"))
             {
+                
                 int i, check = 0;
                 char *name = token[token_index + 1];
                 char stat_name[strlen(correct_name(name))];
@@ -492,7 +549,7 @@ int main()
             
             else if (!strcmp(token[token_index], "volume"))
             {
-                fseek(fopened, 43, SEEK_SET);
+                fseek(fopened, 71, SEEK_SET);
                 fread(&BS_VolLab, 11, 1, fopened);
                 if(!strcmp("NO NAME    ", BS_VolLab)) printf("Volume name not found.\n");
                 printf("volume: %s\n", BS_VolLab);
@@ -515,7 +572,7 @@ int main()
                         {
                             firstClus = dir[i].DIR_FirstClusterLow;
                             file_size = dir[i].DIR_FileSize;
-                            printf("file size: %d\n", dir[i].DIR_FileSize);
+                            //printf("file size: %d\n", dir[i].DIR_FileSize);
                             check += 1;
                         }
                     }
