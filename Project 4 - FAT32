@@ -117,60 +117,6 @@ void read_file(FILE *fp, int pos, int num_bytes, int file_num)
 }
 
 
-//for any path passed to cd, insert / at beginning and concatenate it with the rest of the path
-//obtained using getcwd, then use chdir to change directory to the full path
-/*void cd(char *path, FILE *cdf)
-{
-    //convert to all caps
-    //see if it's in dir[]
-    //grab the cluster number. where in data section it is
-    //LBAT to offset of value for the folder
-    //fseek with new offset
-    //populate the directory
-    //..
-    char new_path[strlen(correct_name(path))];
-    strcpy(new_path, correct_name(path));
-    char *name;
-    
-    int i, firstClus;
-    for(i=0; i<16; i++)
-    {
-        memset(name, 0 , 12);
-        strncpy(&name[0], dir[i].DIR_Name, 11);
-        if(!strcmp(name, new_path))
-        {
-            firstClus = dir[i].DIR_FirstClusterLow;
-        }
-    }
-    int new_offset = LBAToOffset(firstClus);
-    fseek(cdf, new_offset, SEEK_SET);
-    for(i=0; i<16; i++)
-    {
-        memset(&dir[i].DIR_Name, 0, 11);
-        fread(&dir[i], 32, 1 , cdf);
-    }
-    
-    printf("cd\n");
-    
-} */
-
-void ls()
-{
-    //char *dir_name;
-    //correct_name(dir_name);
-    //char *correct_dir_name;
-    //strcpy(correct_dir_name, dir_name);
-    //memset(correct_dir_name, 0 , 12);
-    //strncpy(&correct_dir_name[0], dir[correct_dir_name].DIR_Name, 11);
-    int i;
-    printf("listed files: \n");
-    for(i=0; i<16; i++)
-    {
-        printf("%s\n",dir[i].DIR_Name);
-    }
-}
-
-
 FILE *file_open(char *f)
 {
     FILE *fo = fopen(f, "r");
@@ -276,9 +222,6 @@ char *correct_name(char input[11])
         }
     }
     input_copy[index] = '\0';
-    
-    //printf("input_copy now is: %s\n", input_copy);
-    //printf("length of new input: %lu\n", strlen(input_copy));
     return input_copy;
    
 }
@@ -438,6 +381,7 @@ int main()
                 {
                     memset(&dir[i].DIR_Name, 0, 11);
                     fread(&dir[i], 32, 1 , fopened);
+                    printf("dir[i] is %s\n",dir[i].DIR_Name);
                 }
                 current_working(path_copy);
             }
@@ -445,13 +389,15 @@ int main()
             else if (!strcmp(token[token_index], "ls"))
             {
                 int i, new_offset, firstClus;
-                char name[12];
                 for(i=0;i<16;i++)
                 {
+                    char name[12];
+                    memset(name, 0, 12);
+                    strncpy(&name[0], dir[i].DIR_Name, 11);
+                    
                     if(dir[i].DIR_Attr == 0x10 || dir[i].DIR_Attr == 0x20)
                     {
-                        memset(name, 0, 12);
-                        strncpy(&name[0], dir[i].DIR_Name, 11);
+                        
                         printf("Filename: %s\n", name);
                     }
                 }
@@ -492,46 +438,55 @@ int main()
             {
                 printf("information: \n");
                 printf("BPB_BytesPerSec: %d\n", BPB_BytesPerSec);
+                printf("BPB_BytesPerSec: %x\n", BPB_BytesPerSec);
+                printf("\n");
+                
                 printf("BPB_SecPerClus: %d\n", BPB_SecPerClus);
+                printf("BPB_SecPerClus: %x\n", BPB_SecPerClus);
+                printf("\n");
+                
                 printf("BPB_FATSz32: %d\n", BPB_FATSz32);
+                printf("BPB_FATSz32: %x\n", BPB_FATSz32);
+                printf("\n");
+                
                 printf("BPB_NumFATS: %d\n", BPB_NumFATS);
+                printf("BPB_NumFATS: %x\n", BPB_NumFATS);
+                printf("\n");
+                
                 printf("BPB_RsvdSecCnt: %d\n", BPB_RsvdSecCnt);
+                printf("BPB_RsvdSecCnt: %x\n", BPB_RsvdSecCnt);
+                printf("\n");
             }
             else if (!strcmp(token[token_index], "stat"))
             {
-                int i;
+                int i, check = 0;
                 char *name = token[token_index + 1];
-                int root_dir = (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec) + (BPB_RsvdSecCnt * BPB_BytesPerSec);
-                fseek(fopened, root_dir, SEEK_SET);
-                printf("root_dir: %d\n", root_dir);
-                for(i=0; i<16; i++)
-                {
-                    memset(&dir[i].DIR_Name, 0, 11);
-                    fread(&dir[i], 32, 1 , fopened);
-
-                    
-                }
-                
                 char stat_name[strlen(correct_name(name))];
                 strcpy(stat_name, correct_name(name));
                 for(i=0;i<16;i++)
                 {
+                    
                     if(dir[i].DIR_Attr == 0x10 || dir[i].DIR_Attr == 0x20)
                     {
+                        
                         memset(name, 0 , 12);
                         strncpy(&name[0], dir[i].DIR_Name, 11);
                         if ((!strcmp(stat_name, name)))
                         {
-                           // memset(name, 0 , 12);
-                           // strncpy(&name[0], dir[i].DIR_Name, 11);
                             printf("Filename: %s\n", name);
                             printf("First Cluster: %d\n", dir[i].DIR_FirstClusterLow);
                             printf("File Size: %d\n", dir[i].DIR_FileSize);
                             printf("Attribute %d\n", dir[i].DIR_Attr);
                             printf("\n");
+                            check += 1;
+                            break;
                         }
                     }
                     
+                }
+                if(check == 0)
+                {
+                    printf("Error: File not found.\n");
                 }
             }
             
@@ -546,7 +501,7 @@ int main()
             else if (!strcmp(token[token_index], "get"))
             {
                 char *name = token[token_index + 1];
-                int i, firstClus, file_size;
+                int i, firstClus, file_size, check = 0;
                 //char *file_name = name;
                 char get_name[strlen(correct_name(name))];
                 strcpy(get_name, correct_name(name));
@@ -561,13 +516,22 @@ int main()
                             firstClus = dir[i].DIR_FirstClusterLow;
                             file_size = dir[i].DIR_FileSize;
                             printf("file size: %d\n", dir[i].DIR_FileSize);
+                            check += 1;
                         }
                     }
                     
                 }
-                int new_offset = LBAToOffset(firstClus);
-                fseek(fopened, new_offset, SEEK_SET);
-                get_file(get_name, fopened, file_size);
+                if(check == 0)
+                {
+                    printf("Error: File not found.\n");
+                    
+                }
+                else
+                {
+                    int new_offset = LBAToOffset(firstClus);
+                    fseek(fopened, new_offset, SEEK_SET);
+                    get_file(get_name, fopened, file_size);
+                }
             }
             
             
