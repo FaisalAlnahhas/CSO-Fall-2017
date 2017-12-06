@@ -2,7 +2,7 @@
 //UT Arlington - Fall 2017
 //OS - Project 4 FAT32
 //  mfs.c
-//
+// Faisal Alnahhas and Shivanshi Pandya
 //
 //  Created by Faisal Alnahhas on 12/5/17.
 //
@@ -29,7 +29,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#define _GNU_SOURCE
+//#define _GNU_SOURCE
 
 #include <stdio.h>
 #include <unistd.h>
@@ -51,7 +51,7 @@
 //Changing it to 10 per requirement of project
 #define MAX_NUM_ARGUMENTS 10     // Mav shell only supports five arguments
 
-
+//define these values globally as we will be using them for all functions and calls
 short BPB_BytesPerSec;
 unsigned char BPB_SecPerClus;
 int BPB_FATSz32;
@@ -75,6 +75,7 @@ int LBAToOffset(int32_t sector)
     return ((sector - 2) * BPB_BytesPerSec) + (BPB_BytesPerSec * BPB_RsvdSecCnt) + (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec);
 }
 
+//function to print cwd
 int current_working(char *path)
 {
     char cwd[255];
@@ -95,13 +96,15 @@ int NextLB(uint32_t sector)
     return val;
 }
 
+//when the user specifies the position and number of bytes they want to read it's handled by this function
 void read_file(FILE *fp, int pos, int num_bytes, int file_num)
 {
-    int block = dir[file_num].DIR_FirstClusterLow;
+    int block = dir[file_num].DIR_FirstClusterLow; //storing the first cluster of the file user wants to read
     int file_size = dir[file_num].DIR_FileSize;
-    uint8_t val[file_size];
+    uint8_t val[file_size]; //array to store the values user wants to read
     int file_offset = LBAToOffset(block);
-    //printf("block is: %d\n", block);
+    
+    //if pos > bytes_per_sec then we iterate through the blocks using NextLB function
     while(pos > 512)
     {
         block = NextLB(block);
@@ -109,12 +112,12 @@ void read_file(FILE *fp, int pos, int num_bytes, int file_num)
         pos -= 512;
     }
     
+    //if the results coming from the loop of pos + num_bytes >512 then we fseek
+    //the file offset and read from there, after we correct the pointer of pos
     if(pos + num_bytes > 512)
     {
         pos = 512-pos;
-        //printf("in +_bytes %d\n", pos);
         fseek(fp, file_offset, SEEK_SET);
-        //printf("file offset in + %d\n", file_offset);
         fread(&val, pos, 1, fp);
         printf("val: %s\n", val);
         
@@ -122,10 +125,9 @@ void read_file(FILE *fp, int pos, int num_bytes, int file_num)
     
     else
     {
-        //printf("file offset %d\n", file_offset);
-        //printf("pos value is :%d\n",pos);
+        //anything else we move the pointer to be at offset+pos
+        //this way we're handling all the possible options
         fseek(fp, file_offset + pos, SEEK_SET);
-        //printf("file offset now %d\n", file_offset);
         fread(&val, num_bytes, 1, fp);
         printf("val: %s\n", val);
     }
@@ -169,11 +171,14 @@ void file_close()
 }
 
 
-void stats(FILE *fc, char *passed_file)
+/*void stats(FILE *fc, char *passed_file)
 {
     int i;
     char *name = passed_file;
     long root_dir = (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec) + (BPB_RsvdSecCnt * BPB_BytesPerSec);
+    
+    //stats gives statistics of the struct of the fat32.img
+    //therefore we must fseek to the root directory to read the information from there
     fseek(fc, root_dir, SEEK_SET);
     for(i=0; i<16; i++)
     {
@@ -187,10 +192,12 @@ void stats(FILE *fc, char *passed_file)
     }
 
     
-}
+} */
 
 void get_file(char *f, FILE *fp, int file_size)
 {
+    //val stores the information we read from existing file pointer
+    //then write that information from val to a new file poitner we introduced *fw
     int i, firstClus;
     FILE *fw = fopen(f, "w");
     uint8_t val[file_size];
@@ -205,24 +212,22 @@ char *correct_name(char input[11])
     int i, i2;
     int l = strlen(input);
     static char input_copy[12];
-    //printf("input is: %s\n", input);
-    //printf("input_copy: %s\n", input_copy);
     int index = 0;
     
+    //examine the input name if it has a letter, using isalpha then we capitalize it
     for(i = 0; i<l || index<11; i++)
     {
-        //printf("input[i]: %c\n", input[i]);
-        //printf("%lu\n", strlen(input));
         if (isalpha(input[i]))
         {
             input_copy[index] = toupper(input[i]);
-            //printf("input[i]: %c\n", input[i]);
-            //printf("input[0]: %c\n", input[0]);
             index++;
         }
-
+        //conver the . in file names to a space
         else if(input[i]=='.')
         {
+            //since we know that all file have extension length of 3
+            //we run them through a loop that calculates the correct
+            //cutoff bt. file name and extension to pad it with spaces
             for(i2=0; i2<(11-3-i); i2++)
             {
                 input_copy[index] = ' ';
@@ -230,6 +235,7 @@ char *correct_name(char input[11])
             }
 
         }
+        //when dealing with folders (no .) we just pad with spaces
         else
         {
             input_copy[index]= ' ';
@@ -243,13 +249,13 @@ char *correct_name(char input[11])
 
 int main()
 {
+    //these two ints open_image and close_image will handle the error messages
+    //for when the image file is opened and closed
     int open_image = 0;
     int close_image = 0;
     int command_index = 0;
     char * cmd_str = (char*) malloc( MAX_COMMAND_SIZE );
     //dynamically create a new copy of cmd_str to avoid collision of memory for the pointers
-    char * cmd_str_copy = (char*) malloc( MAX_COMMAND_SIZE );
-    
     char *commands[15]; //array for storing the commands entered
     
     char *pids[255]; //array for storing the pids
@@ -327,6 +333,8 @@ int main()
                 fopened = file_open(token[token_index + 1]);
                 if(fopened != NULL)
                 {
+                    //read the information about the system right after we open it
+                    //this way the values are stored when we open it
                     printf("Image file opened.\n");
                     open_image += 1;
                     close_image = 0;
@@ -370,13 +378,12 @@ int main()
         
         else if((open_image == 1) && (close_image == 0))
         {
-            //calling the cd function introduced above. cd is the 0th index in tokenized input and the
-            //desired directory is the 1st element in the tokenized input so we switch to token_index+1
             if (!strcmp(token[token_index], "cd"))
             {
                 int root_dir = (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec) + (BPB_RsvdSecCnt * BPB_BytesPerSec);
                 int i, firstClus;
                 char *path = token[token_index+1];
+                //handle .. first because we don't want it to get formated with correct_name function
                 if (!strcmp(path, ".."))
                 {
                     for(i=0; i<16; i++)
@@ -384,15 +391,16 @@ int main()
                         memset(path, 0 , 12);
                         strncpy(&path[0], dir[i].DIR_Name, 11);
                        // printf("path after copy: %s\n", path);
-                        if(!strcmp(path, "..         "))
+                        if(!strcmp(path, "..         "))//9 spaces to make sure it's length 11
                         {
                             firstClus = dir[i].DIR_FirstClusterLow;
                             break;
                         }
-                       // printf("first cluster: %d\n", firstClus);
                         
                     }
-                    printf("first cluster: %d\n", firstClus);
+                    //printf("first cluster: %d\n", firstClus);
+                    //if the obtained value of first cluster is zero then
+                    //fseek to root directory instead of new_offset
                     if (firstClus == 0)
                     {
                         fseek(fopened, root_dir, SEEK_SET);
@@ -431,6 +439,8 @@ int main()
                         }
                     }
                     int new_offset = LBAToOffset(firstClus);
+                    //fseek to new_offset sets the file points to the desired new location
+                    //which we obtain using LBAToOffset
                     fseek(fopened, new_offset, SEEK_SET);
                     for(i=0; i<16; i++)
                     {
@@ -444,7 +454,7 @@ int main()
             
             else if (!strcmp(token[token_index], "ls"))
             {
-                int i, new_offset, firstClus;
+                int i;
                 for(i=0;i<16;i++)
                 {
                     char name[12];
@@ -453,7 +463,7 @@ int main()
                     
                     if((dir[i].DIR_Attr == 0x10 || dir[i].DIR_Attr == 0x20))
                     {
-                        printf("dir[0] %c\n", dir[i].DIR_Name[0]);
+                        //printf("dir[0] %c\n", dir[i].DIR_Name[0]);
                         if(name[0] != '?') printf("Filename: %s\n", name);
                     }
                 }
@@ -461,6 +471,9 @@ int main()
             
             else if (!strcmp(token[token_index], "read"))
             {
+                //store the user entries int variables which we will use
+                //to memset and calculate the correct number of bytes
+                //to read
                 char *file_name = token[token_index+1];
                 int pos = atoi(token[token_index+2]);
                 int num_bytes = atoi(token[token_index+3]);
@@ -610,8 +623,6 @@ int main()
         {
             printf("Error: File system image must be opened first.\n");
         }
-        
-       
         free( working_root );
         
     }
